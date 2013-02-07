@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<CodeBlocks_project_file>
+	<FileVersion major="1" minor="6" />
+	<Project>
+		<Option title="unpack_father" />
+		<Option pch_mode="2" />
+		<Option compiler="msvc8" />
+		<Build>
+			<Target title="Release">
+				<Option output="bin\Release\unpack_father" prefix_auto="1" extension_auto="1" />
+				<Option object_output="obj\Release\" />
+				<Option type="3" />
+				<Option compiler="msvc8" />
+				<Compiler>
+					<Add option="/Ox" />
+					<Add option="/DNDEBUG" />
+				</Compiler>
+			</Target>
+		</Build>
+		<Compiler>
+			<Add option="/O2" />
+			<Add option="/GS-" />
+			<Add directory="$(#psdk.include)" />
+		</Compiler>
+		<Linker>
+			<Add library="gdi32" />
+			<Add library="user32" />
+			<Add library="kernel32" />
+			<Add library="Shell32.lib" />
+			<Add library="lib\LDE64.lib" />
+			<Add directory="$(#psdk.lib)" />
+		</Linker>
+		<Unit filename="dbg.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="dbg.h" />
+		<Unit filename="hook_stuff.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="hook_stuff.h" />
+		<Unit filename="unpack_father.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Extensions>
+			<code_completion />
+			<envvars />
+			<debugger />
+		</Extensions>
+	</Project>
+</CodeBlocks_project_file>
