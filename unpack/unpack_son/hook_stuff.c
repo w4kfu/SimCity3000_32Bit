@@ -1,25 +1,21 @@
 #include "hook_stuff.h"
 
-BOOL (__stdcall *Resume_WriteProcessMemory)(HANDLE hProcess, LPVOID lpBaseAddress, LPCVOID lpBuffer, SIZE_T nSize, SIZE_T *lpNumberOfBytesWritten) = NULL;
+void (__stdcall *Resume_BaseProcessStart)(void) = NULL;
 
-BOOL __stdcall Hook_WriteProcessMemory(HANDLE hProcess, LPVOID lpBaseAddress, LPCVOID lpBuffer, SIZE_T nSize, SIZE_T *lpNumberOfBytesWritten)
+void __declspec (naked) Hook_BaseProcessStart(void)
 {
-    DWORD	return_addr;
-
-	__asm
-	{
-		mov eax, [ebp + 4]
-		mov return_addr, eax
-	}
-	print_write_proc(return_addr, hProcess, lpBaseAddress, lpBuffer, nSize, lpNumberOfBytesWritten);
-
-    /*
-    DBG STUFF ;)
-	*((BYTE*)lpBuffer + 0x73) = 0xEB;
-	*((BYTE*)lpBuffer + 0x74) = 0xFE;
-	*/
-    return (Resume_WriteProcessMemory(hProcess, lpBaseAddress, lpBuffer, nSize, lpNumberOfBytesWritten));
+    __asm
+    {
+        //jmp $
+        pushad
+        push eax
+        call print_oep
+        add esp, 4
+        popad
+        jmp Resume_BaseProcessStart
+    }
 }
+
 
 void	setup_hook(char *module, char *name_export, void *Hook_func, void *trampo, DWORD addr)
 {
@@ -49,9 +45,22 @@ void	setup_hook(char *module, char *name_export, void *Hook_func, void *trampo, 
 	VirtualProtect(Proc, len, OldProtect, &OldProtect);
 }
 
-void setup_Hook_WriteProcessMemory(void)
+void setup_Hook_BaseProcessStart(void)
 {
-	Resume_WriteProcessMemory = (BOOL(__stdcall *)(HANDLE hProcess, LPVOID lpBaseAddress, LPCVOID lpBuffer, SIZE_T nSize, SIZE_T *lpNumberOfBytesWritten))VirtualAlloc(0, 0x1000, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
-	memset(Resume_WriteProcessMemory, 0x90, 0x1000);
-	setup_hook("kernel32.dll", "WriteProcessMemory", &Hook_WriteProcessMemory, Resume_WriteProcessMemory, 0);
+    LPSTR pSig = "\x33\xED\x50\x6A\x00\xE9";
+    DWORD BaseProcessStartThunk = 0;
+
+
+    BaseProcessStartThunk = FindCode(pSig, sizeof(pSig),
+                                    GetTextAddress(GetModuleHandleA("kernel32.dll")),
+                                    GetTextSize(GetModuleHandleA("kernel32.dll")));
+    if (BaseProcessStartThunk == 0)
+    {
+        MessageBoxA(NULL, "BaseThreadStart() not found", "ERROR", 0);
+        return;
+    }
+
+	Resume_BaseProcessStart = (DWORD(__stdcall *)(void))VirtualAlloc(0, 0x1000, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+	memset(Resume_BaseProcessStart, 0x90, 0x1000);
+	setup_hook(0, 0, &Hook_BaseProcessStart, Resume_BaseProcessStart, BaseProcessStartThunk);
 }

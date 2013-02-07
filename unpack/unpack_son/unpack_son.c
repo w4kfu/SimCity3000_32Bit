@@ -2,8 +2,24 @@
 
 BOOL WINAPI DllMain(HANDLE hDLL, DWORD dwReason, LPVOID lpReserved)
 {
+    OSVERSIONINFOA lpVersionInfo = {0};
+
     DisableThreadLibraryCalls(GetModuleHandleA("unpack_son.dll"));
-    //setup_Hook_WriteProcessMemory();
-    MessageBoxA(NULL, "IN DA SON", "SON", 0);
+    lpVersionInfo.dwOSVersionInfoSize = sizeof(lpVersionInfo);
+    if (GetVersionExA(&lpVersionInfo) != 0)
+    {
+        if (lpVersionInfo.dwMajorVersion >= 6)
+        {
+            /* not yet implemented */
+        }
+        else
+        {
+            setup_Hook_BaseProcessStart();
+        }
+    }
+    else
+    {
+        MessageBoxA(NULL, "Unable to retrieve operating system version", "ERROR", 0);
+    }
 	return TRUE;
 }
