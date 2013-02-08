@@ -1,7 +1,10 @@
 #include "fixIAT.h"
 
 struct dll *list_dll = NULL;
-PVOID protVectoredHandlerIAT;
+static int NbHBRead = 0;
+extern PVOID protVectoredHandler;
+DWORD ResolvAPI = 0;
+DWORD HBEsp = 0;
 
 void init_fixIAT(void)
 {
@@ -251,25 +254,88 @@ void fixNtdllToKernel(struct api *actualAPI)
     }
 }
 
-LONG CALLBACK ProtectionFaultVectoredHandlerIAT(PEXCEPTION_POINTERS ExceptionInfo)
+LONG CALLBACK ProtectionFaultVectoredHandlerRedir(PEXCEPTION_POINTERS ExceptionInfo)
 {
-    if (ExceptionInfo->ExceptionRecord->ExceptionCode == STATUS_GUARD_PAGE_VIOLATION)
+    //print_res(ExceptionInfo->ExceptionRecord->ExceptionCode);
+    if (ExceptionInfo->ExceptionRecord->ExceptionCode == EXCEPTION_SINGLE_STEP)
     {
         DWORD address = ExceptionInfo->ExceptionRecord->ExceptionInformation[1];
         DWORD eip = ExceptionInfo->ContextRecord->Eip;
 
-        //if (eip == address)
-        //{
-            print_res(eip);
-            __asm
+        if (address == HBEsp)
+        {
+            NbHBRead++;
+            if (NbHBRead == 2)
             {
-                jmp $
+                ExceptionInfo->ContextRecord->Esp += 4;
+                ResolvAPI = *(DWORD*)(ExceptionInfo->ContextRecord->Esp);
             }
-            TerminateThread(GetCurrentThread(), 0);
-            //MessageBoxA(0, "EIP", "EIP", 0);
-        //}
+        }
+        return EXCEPTION_CONTINUE_EXECUTION;
     }
     return EXCEPTION_CONTINUE_SEARCH;
+}
+
+BOOL TestRedirVersion(DWORD dwPAddress)
+{
+    DWORD dwLen = 0;
+
+    dwLen = LDE(dwPAddress, LDE_X86);   // PUSH NUM
+    if (dwLen == 5)
+    {
+        if (*(BYTE*)(dwPAddress + 5) == 0x9C)   // PUSHFD
+        {
+            dwLen = LDE(dwPAddress + 5, LDE_X86);
+            if (dwLen == 1)
+            {
+                if (*(BYTE*)(dwPAddress + 6) == 0x60)   // PUSHAD
+                {
+                    return TRUE;
+                }
+            }
+        }
+
+    }
+    return 0;
+}
+
+void SetEspTrick(DWORD dwPAddress)
+{
+    CONTEXT Context;
+    DWORD addrHBP;
+    HANDLE hThread;
+    PVOID pVectoredHandler;
+
+    NbHBRead = 0;
+    pVectoredHandler = AddVectoredExceptionHandler(0, ProtectionFaultVectoredHandlerRedir);
+    hThread = GetCurrentThread();
+
+    Context.ContextFlags = CONTEXT_ALL;
+    GetThreadContext(hThread, &Context);
+    Context.Dr0 = Context.Esp - 0x30;
+    HBEsp = Context.Dr0;
+    Context.Dr7 = DR7flag(FourByteLength, BreakOnAccess, GlobalFlag | LocalFlag, 0);
+    SetThreadContext(hThread, &Context);
+
+    __asm
+    {
+        pushad
+        pushfd
+        call    dwPAddress
+        popfd
+        popad
+    }
+    Context.ContextFlags = CONTEXT_ALL;
+    GetThreadContext(hThread, &Context);
+    Context.Dr0 = 0;
+    Context.Dr7 = 0;
+    SetThreadContext(hThread, &Context);
+    RemoveVectoredExceptionHandler(pVectoredHandler);
+    /*__asm
+    {
+        jmp $
+    }*/
+    print_res(ResolvAPI);
 }
 
 void fixRedirect(DWORD dwAddr, DWORD dwPAddress)
@@ -278,38 +344,21 @@ void fixRedirect(DWORD dwAddr, DWORD dwPAddress)
     DWORD dwKernSize = 0;
     DWORD dwUserTXT = 0;
     DWORD dwUserSize = 0;
-    DWORD dwOldProtectK;
-    DWORD dwOldProtectU;
-	HANDLE	hThread;
-	DWORD	ThreadId;
-	static NTSTATUS (WINAPI *pNtWaitForSingleObject)(HANDLE,BOOLEAN,PLARGE_INTEGER);
 
     dwKernTXT = (DWORD)GetSectionInfo(GetModuleHandle("kernel32.dll"), ".text", SEC_VIRT_ADDR) + GetModuleHandle("kernel32.dll");
     dwKernSize = (DWORD)GetSectionInfo(GetModuleHandle("kernel32.dll"), ".text", SEC_VIRT_SIZE);
     dwUserTXT = (DWORD)GetSectionInfo(GetModuleHandle("user32.dll"), ".text", SEC_VIRT_ADDR) + GetModuleHandle("user32.dll");
     dwUserSize = (DWORD)GetSectionInfo(GetModuleHandle("user32.dll"), ".text", SEC_VIRT_SIZE);
 
-    protVectoredHandlerIAT = AddVectoredExceptionHandler(0, ProtectionFaultVectoredHandlerIAT);
-
-    VirtualProtect((LPVOID)dwKernTXT, dwKernSize, PAGE_EXECUTE_READWRITE | PAGE_GUARD, &dwOldProtectK);
-    VirtualProtect((LPVOID)dwUserTXT, dwUserSize, PAGE_EXECUTE_READWRITE | PAGE_GUARD, &dwOldProtectU);
-
-
-    hThread = CreateThread(NULL, 100, (LPTHREAD_START_ROUTINE)(dwPAddress), NULL, STACK_SIZE_PARAM_IS_A_RESERVATION, &ThreadId);
-    if (hThread == NULL)
+    if (TestRedirVersion(dwPAddress) == TRUE)
     {
-        exit(EXIT_FAILURE);
+        SetEspTrick(dwPAddress);
     }
-    pNtWaitForSingleObject = (void *)GetProcAddress(GetModuleHandle("ntdll.dll"), "NtWaitForSingleObject");
-    pNtWaitForSingleObject(hThread, FALSE, INFINITE);
-    CloseHandle(hThread);
-    VirtualProtect((LPVOID)dwKernTXT, dwKernSize, dwOldProtectK, &dwOldProtectK);
-    VirtualProtect((LPVOID)dwUserTXT, dwUserSize, dwOldProtectU, &dwOldProtectU);
-    RemoveVectoredExceptionHandler(protVectoredHandlerIAT);
-    __asm
+    else
     {
-        jmp $
+        MessageBoxA(NULL, "Redir Not Supported", "ERROR", 0);
     }
+
 }
 
 void fixiat(DWORD dwStartIAT, DWORD dwEndIAT, struct dll **NewDLL)
