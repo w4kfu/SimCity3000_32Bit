@@ -74,6 +74,14 @@ void print_bug_api_found(char *pName, DWORD dwAddr, DWORD dwPAddress)
     fclose(fp);
 }
 
+void print_bug_dll_found(DWORD dwAddr, DWORD dwPAddress)
+{
+    open_file();
+    fprintf(fp, "[-] BUG DLL : [%X] = %X\n", dwAddr, dwPAddress);
+    fclose(fp);
+}
+
+
 void print_api(struct api *lapi)
 {
     while (lapi)
@@ -154,5 +162,19 @@ void print_iat_info(DWORD dwStart, DWORD dwEnd)
     open_file();
     fprintf(fp, "[+] IAT Start : %X\n", dwStart);
     fprintf(fp, "[+] IAT End : %X\n", dwEnd);
+    fclose(fp);
+}
+
+void print_info_redirect(DWORD dwKernTxt, DWORD dwKernSize)
+{
+    open_file();
+    fprintf(fp, "[+] dwKernTxt : %X ; dwKernSize : %X\n", dwKernTxt, dwKernSize);
+    fclose(fp);
+}
+
+void print_res(DWORD dwResolve)
+{
+    open_file();
+    fprintf(fp, "[+] dwResolve : %X\n", dwResolve);
     fclose(fp);
 }

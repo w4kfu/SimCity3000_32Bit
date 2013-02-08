@@ -16,6 +16,8 @@ void    fixthisshit(PIMAGE_DOS_HEADER pDosHeader, DWORD dwOEP)
     DWORD   dwTextSize = 0;
     struct dll *NewDLL = NULL;
 
+    RemoveVectoredExceptionHandler(ProtectionFaultVectoredHandler);
+
     dwTextBase = (DWORD)GetSectionInfo((BYTE*)pDosHeader, ".text", SEC_VIRT_ADDR) + (DWORD)pDosHeader;
     dwTextSize = (DWORD)GetSectionInfo((BYTE*)pDosHeader, ".text", SEC_VIRT_SIZE);
     init_fixIAT();
@@ -36,6 +38,7 @@ void    fixthisshit(PIMAGE_DOS_HEADER pDosHeader, DWORD dwOEP)
     dwStartIAT = getstartIAT(pAddress);
     dwEndIAT = getendIAT(pAddress);
     print_iat_info(dwStartIAT, dwEndIAT);
+    fixiat(dwStartIAT, dwEndIAT, &NewDLL);
 }
 
 LONG CALLBACK ProtectionFaultVectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)

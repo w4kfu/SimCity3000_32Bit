@@ -23,5 +23,8 @@ void print_api(struct api *lapi);
 void hex_dump(void *data, int size);
 void print_call_jmp(DWORD dwAddrText, DWORD dwDestAddress, DWORD dwPAddress, enum TYPE_INSTRU t, struct dll *dll);
 void print_iat_info(DWORD dwStart, DWORD dwEnd);
+void print_bug_dll_found(DWORD dwAddr, DWORD dwPAddress);
+void print_info_redirect(DWORD dwKernTxt, DWORD dwKernSize);
+void print_res(DWORD dwResolve);
 
 #endif // __DBG_H__

@@ -1,6 +1,7 @@
 #include "fixIAT.h"
 
 struct dll *list_dll = NULL;
+PVOID protVectoredHandlerIAT;
 
 void init_fixIAT(void)
 {
@@ -250,6 +251,67 @@ void fixNtdllToKernel(struct api *actualAPI)
     }
 }
 
+LONG CALLBACK ProtectionFaultVectoredHandlerIAT(PEXCEPTION_POINTERS ExceptionInfo)
+{
+    if (ExceptionInfo->ExceptionRecord->ExceptionCode == STATUS_GUARD_PAGE_VIOLATION)
+    {
+        DWORD address = ExceptionInfo->ExceptionRecord->ExceptionInformation[1];
+        DWORD eip = ExceptionInfo->ContextRecord->Eip;
+
+        //if (eip == address)
+        //{
+            print_res(eip);
+            __asm
+            {
+                jmp $
+            }
+            TerminateThread(GetCurrentThread(), 0);
+            //MessageBoxA(0, "EIP", "EIP", 0);
+        //}
+    }
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
+void fixRedirect(DWORD dwAddr, DWORD dwPAddress)
+{
+    DWORD dwKernTXT = 0;
+    DWORD dwKernSize = 0;
+    DWORD dwUserTXT = 0;
+    DWORD dwUserSize = 0;
+    DWORD dwOldProtectK;
+    DWORD dwOldProtectU;
+	HANDLE	hThread;
+	DWORD	ThreadId;
+	static NTSTATUS (WINAPI *pNtWaitForSingleObject)(HANDLE,BOOLEAN,PLARGE_INTEGER);
+
+    dwKernTXT = (DWORD)GetSectionInfo(GetModuleHandle("kernel32.dll"), ".text", SEC_VIRT_ADDR) + GetModuleHandle("kernel32.dll");
+    dwKernSize = (DWORD)GetSectionInfo(GetModuleHandle("kernel32.dll"), ".text", SEC_VIRT_SIZE);
+    dwUserTXT = (DWORD)GetSectionInfo(GetModuleHandle("user32.dll"), ".text", SEC_VIRT_ADDR) + GetModuleHandle("user32.dll");
+    dwUserSize = (DWORD)GetSectionInfo(GetModuleHandle("user32.dll"), ".text", SEC_VIRT_SIZE);
+
+    protVectoredHandlerIAT = AddVectoredExceptionHandler(0, ProtectionFaultVectoredHandlerIAT);
+
+    VirtualProtect((LPVOID)dwKernTXT, dwKernSize, PAGE_EXECUTE_READWRITE | PAGE_GUARD, &dwOldProtectK);
+    VirtualProtect((LPVOID)dwUserTXT, dwUserSize, PAGE_EXECUTE_READWRITE | PAGE_GUARD, &dwOldProtectU);
+
+
+    hThread = CreateThread(NULL, 100, (LPTHREAD_START_ROUTINE)(dwPAddress), NULL, STACK_SIZE_PARAM_IS_A_RESERVATION, &ThreadId);
+    if (hThread == NULL)
+    {
+        exit(EXIT_FAILURE);
+    }
+    pNtWaitForSingleObject = (void *)GetProcAddress(GetModuleHandle("ntdll.dll"), "NtWaitForSingleObject");
+    pNtWaitForSingleObject(hThread, FALSE, INFINITE);
+    CloseHandle(hThread);
+    VirtualProtect((LPVOID)dwKernTXT, dwKernSize, dwOldProtectK, &dwOldProtectK);
+    VirtualProtect((LPVOID)dwUserTXT, dwUserSize, dwOldProtectU, &dwOldProtectU);
+    RemoveVectoredExceptionHandler(protVectoredHandlerIAT);
+    __asm
+    {
+        jmp $
+    }
+}
+
 void fixiat(DWORD dwStartIAT, DWORD dwEndIAT, struct dll **NewDLL)
 {
     DWORD dwAddr;
@@ -263,7 +325,7 @@ void fixiat(DWORD dwStartIAT, DWORD dwEndIAT, struct dll **NewDLL)
         if (!IsRealBadReadPtr((void*)dwAddr, 4) && !IsRealBadReadPtr(*(PVOID*)dwAddr, 4))
         {
             actualDLL = find_dll(list_dll, *(PVOID*)dwAddr);
-            if (actualDLL) //&& strcmp(actualDLL->pName, "ntdll.dll"))
+            if (actualDLL)
             {
                 actualAPI = find_api(actualDLL->pAPI, *(PVOID*)dwAddr);
                 if (!actualAPI)
@@ -282,6 +344,12 @@ void fixiat(DWORD dwStartIAT, DWORD dwEndIAT, struct dll **NewDLL)
                 }
                 fixNtdllToKernel(actualAPI);
                 AcutalDLLIAT->pAPI = add_api(AcutalDLLIAT->pAPI, actualAPI->pName, actualAPI->dwAddress, actualAPI->wOrdinal);
+            }
+            else
+            {
+                print_bug_dll_found(dwAddr, *(PVOID*)dwAddr);
+                fixRedirect(dwAddr, *(PVOID*)dwAddr);
+                //MessageBoxA(0, "DA FUCK", "CANT FIND A FUCKING DLL ?", 0);
             }
         }
     }
