@@ -1,16 +1,23 @@
 #include "hook_stuff.h"
 
+extern PVOID protVectoredHandler;
+extern DWORD OriginalEP;
+DWORD dwOldProtect;
+
 void (__stdcall *Resume_BaseProcessStart)(void) = NULL;
 
 void __declspec (naked) Hook_BaseProcessStart(void)
 {
     __asm
     {
-        //jmp $
         pushad
-        push eax
-        call print_oep
-        add esp, 4
+        mov OriginalEP, eax
+    }
+    print_oep(OriginalEP);
+    protVectoredHandler = AddVectoredExceptionHandler(0, ProtectionFaultVectoredHandler);
+    VirtualProtect((LPVOID)OriginalEP, 1, PAGE_EXECUTE_READWRITE | PAGE_GUARD, &dwOldProtect);
+    __asm
+    {
         popad
         jmp Resume_BaseProcessStart
     }
@@ -43,6 +50,14 @@ void	setup_hook(char *module, char *name_export, void *Hook_func, void *trampo, 
 	*(BYTE*)Proc = 0xE9;
 	*(DWORD*)((char*)Proc + 1) = (BYTE*)Hook_func - (BYTE*)Proc - 5;
 	VirtualProtect(Proc, len, OldProtect, &OldProtect);
+}
+
+void setup_Hook_RtlUserThreadStart(void)
+{
+    // Use the same trampo as in WinXP
+	Resume_BaseProcessStart = (DWORD(__stdcall *)(void))VirtualAlloc(0, 0x1000, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+	memset(Resume_BaseProcessStart, 0x90, 0x1000);
+    setup_hook("ntdll.dll", "RtlUserThreadStart", &Hook_BaseProcessStart, Resume_BaseProcessStart, 0);
 }
 
 void setup_Hook_BaseProcessStart(void)
