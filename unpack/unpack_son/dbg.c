@@ -132,3 +132,27 @@ void hex_dump(void *data, int size)
     }
     fclose(fp);
 }
+
+void print_call_jmp(DWORD dwAddrText, DWORD dwDestAddress, DWORD dwPAddress, enum TYPE_INSTRU t, struct dll *dll)
+{
+    open_file();
+    switch (t)
+    {
+        case CALL:
+            fprintf(fp, "%X : CALL [%X] = %X\n", dwAddrText, dwDestAddress, dwPAddress);
+            break;
+        case JUMP:
+            fprintf(fp, "%X : JMP [%X] = %X\n", dwAddrText, dwDestAddress, dwPAddress);
+            break;
+    }
+
+    fclose(fp);
+}
+
+void print_iat_info(DWORD dwStart, DWORD dwEnd)
+{
+    open_file();
+    fprintf(fp, "[+] IAT Start : %X\n", dwStart);
+    fprintf(fp, "[+] IAT End : %X\n", dwEnd);
+    fclose(fp);
+}

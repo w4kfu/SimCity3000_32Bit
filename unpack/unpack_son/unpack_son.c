@@ -12,10 +12,30 @@ void    fixthisshit(PIMAGE_DOS_HEADER pDosHeader, DWORD dwOEP)
     DWORD   dwStartIAT;
     DWORD   dwEndIAT;
     DWORD   dwSizeIAT = 0;
+    DWORD   dwTextBase = 0;
+    DWORD   dwTextSize = 0;
     struct dll *NewDLL = NULL;
 
+    dwTextBase = (DWORD)GetSectionInfo((BYTE*)pDosHeader, ".text", SEC_VIRT_ADDR) + (DWORD)pDosHeader;
+    dwTextSize = (DWORD)GetSectionInfo((BYTE*)pDosHeader, ".text", SEC_VIRT_SIZE);
     init_fixIAT();
-
+    for (dwActual = dwOEP; dwActual < dwTextBase + dwTextSize - 5; dwActual++)
+    {
+        if ((dwActual[0] == 0xFF) && ((dwActual[1] == 0x25)  || (dwActual[1] == 0x15)))
+        {
+            pAddress = *(PDWORD*)(dwActual + 2);
+            if ((!IsRealBadReadPtr(pAddress, 4)) && (!IsRealBadReadPtr((void*)*pAddress, 4)))
+            {
+                DWORD address = *pAddress;
+                dwNearIAT = pAddress;
+                print_call_jmp(dwActual, pAddress, address, dwActual[1], NULL);
+                break;
+            }
+        }
+    }
+    dwStartIAT = getstartIAT(pAddress);
+    dwEndIAT = getendIAT(pAddress);
+    print_iat_info(dwStartIAT, dwEndIAT);
 }
 
 LONG CALLBACK ProtectionFaultVectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
