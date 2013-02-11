@@ -19,6 +19,8 @@ enum CHAMP_PE
     EXPORT_TABLE_SIZE
 };
 
+BOOL SetPrivilege(HANDLE hToken, LPCTSTR lpszPrivilege, BOOL bEnablePrivilege);
+
 BOOL IsRealBadReadPtr(void* address, int size);
 void* ParseSection(PIMAGE_SECTION_HEADER pSection, DWORD dwChamp);
 void* GetSectionInfo(BYTE* hMod, char *name, DWORD dwChamp);

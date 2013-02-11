@@ -3,6 +3,7 @@
 extern PVOID protVectoredHandler;
 extern DWORD OriginalEP;
 DWORD dwOldProtect;
+static init_oep = 0;
 
 void (__stdcall *Resume_BaseProcessStart)(void) = NULL;
 
@@ -13,6 +14,15 @@ void __declspec (naked) Hook_BaseProcessStart(void)
         pushad
         mov OriginalEP, eax
     }
+    if (init_oep)
+    {
+        __asm
+        {
+            popad
+            jmp Resume_BaseProcessStart
+        }
+    }
+    init_oep = 1;
     print_oep(OriginalEP);
     protVectoredHandler = AddVectoredExceptionHandler(0, ProtectionFaultVectoredHandler);
     VirtualProtect((LPVOID)OriginalEP, 1, PAGE_EXECUTE_READWRITE | PAGE_GUARD, &dwOldProtect);

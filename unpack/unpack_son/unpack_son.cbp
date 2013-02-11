@@ -28,17 +28,26 @@
 			<Add library="kernel32" />
 			<Add library="Shell32.lib" />
 			<Add library="lib\LDE64.lib" />
+			<Add library="Advapi32.lib" />
 			<Add directory="$(#psdk.lib)" />
 		</Linker>
 		<Unit filename="dbg.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="dbg.h" />
+		<Unit filename="fixIAT.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="fixIAT.h" />
 		<Unit filename="hook_stuff.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="hook_stuff.h" />
-		<Unit filename="unpack.c">
+		<Unit filename="pestuff.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="pestuff.h" />
+		<Unit filename="unpack_son.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Extensions>

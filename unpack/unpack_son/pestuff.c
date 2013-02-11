@@ -54,6 +54,64 @@ DWORD GetTextSize(HMODULE hModule)
     return 0;
 }
 
+BOOL SetPrivilege(
+                          HANDLE hToken,  // access token handle
+                          LPCTSTR lpszPrivilege,    // name of privilege to enable/disable
+                          BOOL bEnablePrivilege    // to enable (or disable privilege)
+                          )
+{
+      // Token privilege structure
+      TOKEN_PRIVILEGES tp;
+      // Used by local system to identify the privilege
+      LUID luid;
+
+      if(!LookupPrivilegeValueA(
+            NULL,                   // lookup privilege on local system
+            lpszPrivilege,          // privilege to lookup
+            &luid))                       // receives LUID of privilege
+      {
+          MessageBoxA(NULL, "LookupPrivilegeValue()", "ERROR", 0);
+            //wprintf(L"LookupPrivilegeValue() failed, error: %u\n", GetLastError());
+            return FALSE;
+      }
+            //wprintf(L"LookupPrivilegeValue() - \"%s\" found!\n", lpszPrivilege);
+
+      // Number of privilege
+      tp.PrivilegeCount = 1;
+      // Assign luid to the 1st count
+      tp.Privileges[0].Luid = luid;
+
+      // Enable/disable
+      if(bEnablePrivilege)
+      {
+            // Enable
+            tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+            //wprintf(L"\"%s\" was enabled!\n", lpszPrivilege);
+      }
+      else
+      {
+            // Disable
+            tp.Privileges[0].Attributes = 0;
+            //wprintf(L"\"%s\" was disabled!\n", lpszPrivilege);
+      }
+
+      // Adjusting the new privilege
+      if(!AdjustTokenPrivileges(
+            hToken,
+            FALSE,      // If TRUE, function disables all privileges,
+                        // if FALSE the function modifies privilege based on the tp
+            &tp,
+            sizeof(TOKEN_PRIVILEGES),
+            (PTOKEN_PRIVILEGES) NULL,
+            (PDWORD) NULL))
+      {
+          MessageBoxA(NULL, "AdjustTokenPrivileges()", "ERROR", 0);
+            //wprintf(L"AdjustTokenPrivileges() failed to adjust the new privilege, error: %u\n", GetLastError());
+            return FALSE;
+      }
+      return TRUE;
+}
+
 BOOL IsRealBadReadPtr(void* address, int size)
 {
     MEMORY_BASIC_INFORMATION mbi;

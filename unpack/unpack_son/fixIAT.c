@@ -256,7 +256,6 @@ void fixNtdllToKernel(struct api *actualAPI)
 
 LONG CALLBACK ProtectionFaultVectoredHandlerRedir(PEXCEPTION_POINTERS ExceptionInfo)
 {
-    //print_res(ExceptionInfo->ExceptionRecord->ExceptionCode);
     if (ExceptionInfo->ExceptionRecord->ExceptionCode == EXCEPTION_SINGLE_STEP)
     {
         DWORD address = ExceptionInfo->ExceptionRecord->ExceptionInformation[1];
@@ -309,14 +308,12 @@ void SetEspTrick(DWORD dwPAddress)
     NbHBRead = 0;
     pVectoredHandler = AddVectoredExceptionHandler(0, ProtectionFaultVectoredHandlerRedir);
     hThread = GetCurrentThread();
-
     Context.ContextFlags = CONTEXT_ALL;
     GetThreadContext(hThread, &Context);
     Context.Dr0 = Context.Esp - 0x30;
     HBEsp = Context.Dr0;
     Context.Dr7 = DR7flag(FourByteLength, BreakOnAccess, GlobalFlag | LocalFlag, 0);
     SetThreadContext(hThread, &Context);
-
     __asm
     {
         pushad
@@ -331,10 +328,6 @@ void SetEspTrick(DWORD dwPAddress)
     Context.Dr7 = 0;
     SetThreadContext(hThread, &Context);
     RemoveVectoredExceptionHandler(pVectoredHandler);
-    /*__asm
-    {
-        jmp $
-    }*/
     print_res(ResolvAPI);
 }
 
@@ -396,8 +389,12 @@ void fixiat(DWORD dwStartIAT, DWORD dwEndIAT, struct dll **NewDLL)
             }
             else
             {
+                DWORD dwOdlProt;
+
                 print_bug_dll_found(dwAddr, *(PVOID*)dwAddr);
                 fixRedirect(dwAddr, *(PVOID*)dwAddr);
+                VirtualProtect(dwAddr, 4, 0x40, &dwOdlProt);
+                *(DWORD*)dwAddr = ResolvAPI;
                 //MessageBoxA(0, "DA FUCK", "CANT FIND A FUCKING DLL ?", 0);
             }
         }

@@ -3,6 +3,9 @@
 
 PVOID protVectoredHandler;
 DWORD OriginalEP;
+LPCTSTR lpszPrivilege = "SeSecurityPrivilege";
+BOOL bEnablePrivilege = TRUE;
+HANDLE hToken;
 
 void    fixthisshit(PIMAGE_DOS_HEADER pDosHeader, DWORD dwOEP)
 {
@@ -16,7 +19,13 @@ void    fixthisshit(PIMAGE_DOS_HEADER pDosHeader, DWORD dwOEP)
     DWORD   dwTextSize = 0;
     struct dll *NewDLL = NULL;
 
-    RemoveVectoredExceptionHandler(ProtectionFaultVectoredHandler);
+    RemoveVectoredExceptionHandler(protVectoredHandler);
+
+    OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES, &hToken);
+    if (SetPrivilege(hToken, lpszPrivilege, bEnablePrivilege) == FALSE)
+    {
+        MessageBoxA(NULL, "SetPrivilege() failed", "ERROR", 0);
+    }
 
     dwTextBase = (DWORD)GetSectionInfo((BYTE*)pDosHeader, ".text", SEC_VIRT_ADDR) + (DWORD)pDosHeader;
     dwTextSize = (DWORD)GetSectionInfo((BYTE*)pDosHeader, ".text", SEC_VIRT_SIZE);
@@ -35,6 +44,7 @@ void    fixthisshit(PIMAGE_DOS_HEADER pDosHeader, DWORD dwOEP)
             }
         }
     }
+
     dwStartIAT = getstartIAT(pAddress);
     dwEndIAT = getendIAT(pAddress);
     print_iat_info(dwStartIAT, dwEndIAT);
