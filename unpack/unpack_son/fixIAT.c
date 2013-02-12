@@ -294,9 +294,80 @@ BOOL TestRedirVersion(DWORD dwPAddress)
                 }
             }
         }
-
     }
     return 0;
+}
+
+LONG CALLBACK ProtectionFaultVectoredHandlerPushad(PEXCEPTION_POINTERS ExceptionInfo)
+{
+    DWORD dwOldProtect;
+    DWORD dwLenInstru;
+    DWORD address;
+    DWORD eip;
+    static BOOL stepInto = FALSE;
+
+    if (ExceptionInfo->ExceptionRecord->ExceptionCode == STATUS_GUARD_PAGE_VIOLATION)
+    {
+        address = ExceptionInfo->ExceptionRecord->ExceptionInformation[1];
+        eip = ExceptionInfo->ContextRecord->Eip;
+
+        if (eip == address && *(BYTE*)eip == 0x54) // PUSH ESP
+        {
+            ExceptionInfo->ContextRecord->Dr0 = ExceptionInfo->ContextRecord->Esp;
+            // clean this global var
+            HBEsp = ExceptionInfo->ContextRecord->Dr0;
+            ExceptionInfo->ContextRecord->Dr7 = DR7flag(FourByteLength, BreakOnAccess, GlobalFlag | LocalFlag, 0);
+        }
+        else
+        {
+            stepInto = TRUE;
+            ExceptionInfo->ContextRecord->EFlags |= 0x100;
+        }
+        return EXCEPTION_CONTINUE_EXECUTION;
+    }
+    else if ((ExceptionInfo->ExceptionRecord->ExceptionCode == EXCEPTION_SINGLE_STEP) && (stepInto))
+    {
+        eip = ExceptionInfo->ContextRecord->Eip;
+        dwLenInstru = LDE((void*)(eip), LDE_X86);
+        VirtualProtect((LPVOID)(eip + dwLenInstru), 1, PAGE_EXECUTE_READWRITE | PAGE_GUARD, &dwOldProtect);
+        stepInto = FALSE;
+        return EXCEPTION_CONTINUE_EXECUTION;
+    }
+    else if (ExceptionInfo->ExceptionRecord->ExceptionCode == EXCEPTION_SINGLE_STEP)
+    {
+
+        address = ExceptionInfo->ExceptionRecord->ExceptionInformation[1];
+        if (address == HBEsp)
+        {
+            ExceptionInfo->ContextRecord->Dr0 = 0;
+            ExceptionInfo->ContextRecord->Dr7 = 0;
+            ExceptionInfo->ContextRecord->Esp += 4;
+            ResolvAPI = *(DWORD*)(ExceptionInfo->ContextRecord->Esp);
+            ExceptionInfo->ContextRecord->Esp += 4;
+            *(DWORD*)(ExceptionInfo->ContextRecord->Esp) = *(DWORD*)(ExceptionInfo->ContextRecord->Esp + 8);
+            return EXCEPTION_CONTINUE_EXECUTION;
+        }
+    }
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
+void SetupBreakOnpushad(DWORD dwAddr, DWORD dwPAddress)
+{
+    PVOID pVectoredHandler;
+    DWORD dwOldProtect;
+
+    pVectoredHandler = AddVectoredExceptionHandler(0, ProtectionFaultVectoredHandlerPushad);
+    // *(dwPAddress + 7) : 0x54 ; PUSH ESP
+    VirtualProtect((LPVOID)(dwPAddress + 7), 1, PAGE_EXECUTE_READWRITE | PAGE_GUARD, &dwOldProtect);
+    __asm
+    {
+        pushad
+        pushfd
+        call    dwAddr
+        popfd
+        popad
+    }
+    RemoveVectoredExceptionHandler(pVectoredHandler);
 }
 
 void SetEspTrick(DWORD dwPAddress)
@@ -347,7 +418,8 @@ void fixRedirect(DWORD dwAddr, DWORD dwPAddress)
 
     if (TestRedirVersion(dwPAddress) == TRUE)
     {
-        SetEspTrick(dwAddr);
+        //SetEspTrick(dwAddr);
+        SetupBreakOnpushad(dwAddr, dwPAddress);
     }
     else
     {
