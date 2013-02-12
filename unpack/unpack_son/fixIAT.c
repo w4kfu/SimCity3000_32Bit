@@ -305,6 +305,7 @@ LONG CALLBACK ProtectionFaultVectoredHandlerPushad(PEXCEPTION_POINTERS Exception
     DWORD address;
     DWORD eip;
     static BOOL stepInto = FALSE;
+    DWORD tempRegVal;
 
     if (ExceptionInfo->ExceptionRecord->ExceptionCode == STATUS_GUARD_PAGE_VIOLATION)
     {
@@ -315,7 +316,10 @@ LONG CALLBACK ProtectionFaultVectoredHandlerPushad(PEXCEPTION_POINTERS Exception
         {
             ExceptionInfo->ContextRecord->Dr0 = ExceptionInfo->ContextRecord->Esp;
             // clean this global var
+            MessageBoxA(NULL, "PSUH ESP !!!", "GO", 0);
             HBEsp = ExceptionInfo->ContextRecord->Dr0;
+            //ExceptionInfo->ContextRecord->Dr7 = BREAKPOINT_LOCAL_EXACT | DR0_BREAKPOINT_LOCAL | DR0_ACCESS | DR0_FOUR_BYTE;
+            ExceptionInfo->ContextRecord->ContextFlags = CONTEXT_FULL | CONTEXT_DEBUG_REGISTERS;
             ExceptionInfo->ContextRecord->Dr7 = DR7flag(FourByteLength, BreakOnAccess, GlobalFlag | LocalFlag, 0);
         }
         else
@@ -335,10 +339,11 @@ LONG CALLBACK ProtectionFaultVectoredHandlerPushad(PEXCEPTION_POINTERS Exception
     }
     else if (ExceptionInfo->ExceptionRecord->ExceptionCode == EXCEPTION_SINGLE_STEP)
     {
-
+        MessageBoxA(NULL, "EXCEPTION_SINGLE_STEP !!! (1)", "GO", 0);
         address = ExceptionInfo->ExceptionRecord->ExceptionInformation[1];
         if (address == HBEsp)
         {
+            MessageBoxA(NULL, "EXCEPTION_SINGLE_STEP !!! (2)", "GO", 0);
             ExceptionInfo->ContextRecord->Dr0 = 0;
             ExceptionInfo->ContextRecord->Dr7 = 0;
             ExceptionInfo->ContextRecord->Esp += 4;
@@ -368,6 +373,7 @@ void SetupBreakOnpushad(DWORD dwAddr, DWORD dwPAddress)
         popad
     }
     RemoveVectoredExceptionHandler(pVectoredHandler);
+    MessageBoxA(NULL, "[+] END !!! SetupBreakOnpushad", "GO", 0);
 }
 
 void SetEspTrick(DWORD dwPAddress)

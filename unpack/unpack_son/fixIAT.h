@@ -81,5 +81,11 @@ DWORD Countnbapi(struct redir_api *ap);
 
 #define DR7flag(_size,_type,flag,HBPnum) (((_size<<2 | _type)<< (HBPnum*4 +16)) | (flag << (HBPnum*2)))
 
+#define BREAKPOINT_LOCAL_EXACT      0x00000300
+#define DR0_BREAKPOINT_LOCAL      0x00000001
+#define DR0_ACCESS               0x00030000
+#define DR0_FOUR_BYTE            0x000C0000
+
+
 #endif // __FIXIAT_H__
 
