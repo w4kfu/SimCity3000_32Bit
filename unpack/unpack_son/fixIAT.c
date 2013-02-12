@@ -268,6 +268,7 @@ LONG CALLBACK ProtectionFaultVectoredHandlerRedir(PEXCEPTION_POINTERS ExceptionI
             {
                 ExceptionInfo->ContextRecord->Esp += 4;
                 ResolvAPI = *(DWORD*)(ExceptionInfo->ContextRecord->Esp);
+                ExceptionInfo->ContextRecord->Esp += 4;
             }
         }
         return EXCEPTION_CONTINUE_EXECUTION;
@@ -279,12 +280,12 @@ BOOL TestRedirVersion(DWORD dwPAddress)
 {
     DWORD dwLen = 0;
 
-    dwLen = LDE(dwPAddress, LDE_X86);   // PUSH NUM
+    dwLen = LDE((void*)(dwPAddress), LDE_X86);   // PUSH NUM
     if (dwLen == 5)
     {
         if (*(BYTE*)(dwPAddress + 5) == 0x9C)   // PUSHFD
         {
-            dwLen = LDE(dwPAddress + 5, LDE_X86);
+            dwLen = LDE((void*)(dwPAddress + 5), LDE_X86);
             if (dwLen == 1)
             {
                 if (*(BYTE*)(dwPAddress + 6) == 0x60)   // PUSHAD
@@ -310,7 +311,8 @@ void SetEspTrick(DWORD dwPAddress)
     hThread = GetCurrentThread();
     Context.ContextFlags = CONTEXT_ALL;
     GetThreadContext(hThread, &Context);
-    Context.Dr0 = Context.Esp - 0x30;
+
+    Context.Dr0 = Context.Esp - 0x34;
     HBEsp = Context.Dr0;
     Context.Dr7 = DR7flag(FourByteLength, BreakOnAccess, GlobalFlag | LocalFlag, 0);
     SetThreadContext(hThread, &Context);
@@ -322,36 +324,88 @@ void SetEspTrick(DWORD dwPAddress)
         popfd
         popad
     }
+    RemoveVectoredExceptionHandler(pVectoredHandler);
     Context.ContextFlags = CONTEXT_ALL;
     GetThreadContext(hThread, &Context);
     Context.Dr0 = 0;
     Context.Dr7 = 0;
     SetThreadContext(hThread, &Context);
-    RemoveVectoredExceptionHandler(pVectoredHandler);
     print_res(ResolvAPI);
 }
 
 void fixRedirect(DWORD dwAddr, DWORD dwPAddress)
 {
-    DWORD dwKernTXT = 0;
+    /*DWORD dwKernTXT = 0;
     DWORD dwKernSize = 0;
     DWORD dwUserTXT = 0;
-    DWORD dwUserSize = 0;
+    DWORD dwUserSize = 0;*/
 
-    dwKernTXT = (DWORD)GetSectionInfo(GetModuleHandle("kernel32.dll"), ".text", SEC_VIRT_ADDR) + GetModuleHandle("kernel32.dll");
+    /*dwKernTXT = (DWORD)GetSectionInfo(GetModuleHandle("kernel32.dll"), ".text", SEC_VIRT_ADDR) + GetModuleHandle("kernel32.dll");
     dwKernSize = (DWORD)GetSectionInfo(GetModuleHandle("kernel32.dll"), ".text", SEC_VIRT_SIZE);
     dwUserTXT = (DWORD)GetSectionInfo(GetModuleHandle("user32.dll"), ".text", SEC_VIRT_ADDR) + GetModuleHandle("user32.dll");
-    dwUserSize = (DWORD)GetSectionInfo(GetModuleHandle("user32.dll"), ".text", SEC_VIRT_SIZE);
+    dwUserSize = (DWORD)GetSectionInfo(GetModuleHandle("user32.dll"), ".text", SEC_VIRT_SIZE);*/
 
     if (TestRedirVersion(dwPAddress) == TRUE)
     {
-        SetEspTrick(dwPAddress);
+        SetEspTrick(dwAddr);
     }
     else
     {
         MessageBoxA(NULL, "Redir Not Supported", "ERROR", 0);
     }
 
+}
+
+struct redir_api *FixRedir(struct redir_api *ap, DWORD dwAddr)
+{
+    DWORD   dwOdlProt;
+    DWORD   dwTextBase = 0;
+    DWORD   dwTextSize = 0;
+    DWORD   i;
+    BYTE    *ptr;
+    DWORD   val;
+
+    print_bug_dll_found(dwAddr, *(DWORD*)dwAddr);
+
+    dwTextBase = (DWORD)GetSectionInfo((BYTE*)GetModuleHandle(0), ".text", SEC_VIRT_ADDR) + (DWORD)GetModuleHandle(0);
+    dwTextSize = (DWORD)GetSectionInfo((BYTE*)GetModuleHandle(0), ".text", SEC_VIRT_SIZE);
+    for (i = 0; i < dwTextSize; i++)
+    {
+        ptr = (BYTE*)(dwTextBase + i);
+        if ((*ptr == 0xFF && *(ptr + 1) == 0x15) //|| // call []
+            //(*ptr == 0xFF && *(ptr + 1) == 0x25) //|| // jmp [] // JMP require a random pushed value
+            //(*ptr == 0x8B && *(ptr + 1) == 0x35) || // mov esi, ...
+            //(*ptr == 0x8B && *(ptr + 1) == 0x2D) || // mov ebp, ...
+            //(*ptr == 0x8B && *(ptr + 1) == 0x1D) || // mov ebx, ...
+            //(*ptr == 0x8B && *(ptr + 1) == 0x3D))   // mov edi, ...
+            )
+            {
+                val = *(ptr + 5) << 0x18 | *(ptr + 4) << 0x10 | *(ptr + 3) << 0x8  | *(ptr + 2);
+                if (val == dwAddr)
+                {
+                    //fixRedirect(dwAddr, *(PVOID*)dwAddr);
+                    fixRedirect((DWORD)ptr, *(DWORD*)dwAddr);
+                    ap = add_redir_api(ap, ResolvAPI, val, (DWORD)(ptr + 2));
+                }
+            }
+        else if ((*ptr == 0xFF && *(ptr + 1) == 0x25)) //|| // jmp [] // JMP require a random pushed value
+            //(*ptr == 0x8B && *(ptr + 1) == 0x35) || // mov esi, ...
+            //(*ptr == 0x8B && *(ptr + 1) == 0x2D) || // mov ebp, ...
+            //(*ptr == 0x8B && *(ptr + 1) == 0x1D) || // mov ebx, ...
+            //(*ptr == 0x8B && *(ptr + 1) == 0x3D))
+            {
+                val = *(ptr + 5) << 0x18 | *(ptr + 4) << 0x10 | *(ptr + 3) << 0x8  | *(ptr + 2);
+                if (val == dwAddr)
+                {
+
+                }
+            }
+    }
+    return ap;
+    //VirtualProtect(dwAddr, 4, 0x40, &dwOdlProt);
+    //*(DWORD*)dwAddr = ResolvAPI;
+
+    //ap = add_api(ap, ResolvAPI, val, (DWORD)(ptr + 2), 0);
 }
 
 void fixiat(DWORD dwStartIAT, DWORD dwEndIAT, struct dll **NewDLL)
@@ -361,6 +415,7 @@ void fixiat(DWORD dwStartIAT, DWORD dwEndIAT, struct dll **NewDLL)
     struct dll *AcutalDLLIAT = NULL;
     struct dll *actualDLL = NULL;
     struct api *actualAPI = NULL;
+	struct redir_api *ap = NULL;
 
     for (dwAddr = dwStartIAT; dwAddr <= dwEndIAT; dwAddr += 4)
     {
@@ -389,12 +444,8 @@ void fixiat(DWORD dwStartIAT, DWORD dwEndIAT, struct dll **NewDLL)
             }
             else
             {
-                DWORD dwOdlProt;
-
-                print_bug_dll_found(dwAddr, *(PVOID*)dwAddr);
-                fixRedirect(dwAddr, *(PVOID*)dwAddr);
-                VirtualProtect(dwAddr, 4, 0x40, &dwOdlProt);
-                *(DWORD*)dwAddr = ResolvAPI;
+                ap = FixRedir(ap, dwAddr);
+                //print_redir_api(ap);
                 //MessageBoxA(0, "DA FUCK", "CANT FIND A FUCKING DLL ?", 0);
             }
         }
@@ -403,6 +454,12 @@ void fixiat(DWORD dwStartIAT, DWORD dwEndIAT, struct dll **NewDLL)
     print_dll(NewDLLIAT);
     print_size_new_iat(NewDLLIAT);
     *NewDLL = NewDLLIAT;
+
+	print_redir_api(ap);
+	reorder_api_rdata(ap);
+	print_after();
+    print_redir_api(ap);
+    fix_api_rdata(ap);
 }
 
 DWORD count_nb_dll(struct dll *ldll)
@@ -493,4 +550,248 @@ PBYTE Reconstruct(DWORD dwStartIAT, struct dll *NewDLLIAT, DWORD dwVAIAT)
     }
     hex_dump(newIAT, SizeIAT);
     return newIAT;
+}
+
+struct redir_api *find_redir_api(struct redir_api *ap, DWORD api_addr)
+{
+	while (ap)
+	{
+		if (ap->api_addr == api_addr)
+			return ap;
+		ap = ap->next;
+	}
+	return NULL;
+}
+
+struct rdata_s *find_rdata(struct rdata_s *rd, DWORD rdata_addr)
+{
+	while (rd)
+	{
+		if (rd->rdata_addr == rdata_addr)
+			return rd;
+		rd = rd->next;
+	}
+	return NULL;
+}
+
+struct rdata_s *find_txt(struct rdata_s *rd, DWORD txt_addr)
+{
+	while (rd)
+	{
+		if (rd->txt_addr == txt_addr)
+			return rd;
+		rd = rd->next;
+	}
+	return NULL;
+}
+
+
+struct redir_api *add_redir_api(struct redir_api *ap, DWORD api_addr, DWORD rdata_addr, DWORD txt_addr)
+{
+	struct redir_api *new_ap = NULL;
+	struct redir_api *cur = NULL;
+
+	if (ap)
+	{
+		if ((cur = find_redir_api(ap, api_addr)) != NULL)
+		{
+			cur->rdata = add_rdata(cur->rdata, rdata_addr, txt_addr);
+			return ap;
+		}
+	}
+	new_ap = (struct redir_api*)malloc(sizeof (struct redir_api));
+	memset(new_ap, 0, sizeof (struct redir_api));
+	new_ap->next = ap;
+	new_ap->api_addr = api_addr;
+	new_ap->rdata = add_rdata(new_ap->rdata, rdata_addr, txt_addr);
+	return new_ap;
+}
+
+struct rdata_s *add_rdata(struct rdata_s *rd, DWORD rdata_addr, DWORD txt_addr)
+{
+	struct rdata_s *new_rdata = NULL;
+
+	new_rdata = (struct rdata_s*)malloc(sizeof (struct rdata_s));
+	memset(new_rdata, 0, sizeof (struct rdata_s));
+	new_rdata->next = rd;
+	new_rdata->rdata_addr = rdata_addr;
+	new_rdata->txt_addr = txt_addr;
+    return new_rdata;
+}
+
+struct rdata_s *get_rdata(struct rdata_s *rd, DWORD *rdata_addr)
+{
+	struct rdata_s *rd_actual;
+
+	if (rd)
+	{
+		*rdata_addr = rd->rdata_addr;
+		rd_actual = rd;
+		rd = rd->next;
+		free(rd_actual);
+		return rd;
+	}
+	return NULL;
+}
+
+DWORD Lenrdata(struct rdata_s *rd)
+{
+    DWORD dwCount = 0;
+
+	while (rd)
+	{
+	    dwCount++;
+		rd = rd->next;
+	}
+	return dwCount;
+}
+
+// FREE ALL THIS SHIT ?
+DWORD Countnbrdata(struct redir_api *ap)
+{
+    struct rdata_s *rdata_used = NULL;
+    struct rdata_s *rdata_actual = NULL;
+    DWORD dwCount = 0;
+
+    while (ap)
+    {
+        rdata_actual = ap->rdata;
+        while (rdata_actual)
+        {
+            if (find_rdata(rdata_used, rdata_actual->rdata_addr) == NULL)
+                rdata_used = add_rdata(rdata_used, rdata_actual->rdata_addr, 0);
+            rdata_actual = rdata_actual->next;
+        }
+        ap = ap->next;
+    }
+    while (rdata_used)
+    {
+        dwCount++;
+        rdata_used = rdata_used->next;
+    }
+    return dwCount;
+}
+
+DWORD Countnbapi(struct redir_api *ap)
+{
+    DWORD dwCount = 0;
+
+    while (ap)
+    {
+        dwCount++;
+        ap = ap->next;
+    }
+    return dwCount;
+}
+
+DWORD find_free(struct redir_api *ap, struct rdata_s *rdata_used, DWORD actual_rdata_addr)
+{
+    struct rdata_s *rdata_actual = NULL;
+    struct rdata_s *rd = NULL;
+
+    while (ap)
+    {
+        rdata_actual =  ap->rdata;
+
+        if (find_rdata(rdata_actual, actual_rdata_addr) == NULL)
+        {
+            if (Lenrdata(rdata_actual) > 1)
+            {
+                while (rdata_actual)
+                {
+                    if (find_rdata(rdata_used, rdata_actual->rdata_addr) == NULL)
+                        return rdata_actual->rdata_addr;
+                    rdata_actual = rdata_actual->next;
+                }
+            }
+        }
+        ap = ap->next;
+    }
+    return 0;
+}
+
+void reorder_api_rdata(struct redir_api *ap)
+{
+	struct rdata_s *rdata_free = NULL;
+	struct rdata_s *rdata_used = NULL;
+	struct rdata_s *rdata_actual = NULL;
+	DWORD actual_rdata_addr = 0;
+    struct redir_api *save_ap = NULL;
+    DWORD nb_ap = 0;
+    DWORD save_api = 0;
+    struct rdata_s *save_rdata = NULL;
+    DWORD next_free_rdata;
+
+    printnb(ap);
+    save_ap = ap;
+	while (ap)
+	{
+		if (ap->rdata == NULL)
+		{
+			MessageBoxA(NULL, "There is something wrong!", "!?", 0);
+			exit(0);
+		}
+		save_api = 0; // BOOL
+		actual_rdata_addr = ap->rdata->rdata_addr;
+		if (find_rdata(rdata_used, actual_rdata_addr))
+		{
+			if (rdata_free == NULL)
+			{
+			    //save_rdata = add_rdata(save_rdata, actual_rdata_addr, ap->rdata->txt_addr);
+			    //ap = ap->next;
+			    //continue;
+			    // Search actual_rdata_addr in other place
+                next_free_rdata = find_free(save_ap, rdata_used, actual_rdata_addr);
+                //print_free_bug(next_free_rdata, actual_rdata_addr);
+                if (next_free_rdata == 0)
+                {
+                    MessageBoxA(NULL, "WTF no more entry", "!?", 0);
+                    exit(0);
+                }
+			    rdata_free = add_rdata(rdata_free, next_free_rdata, ap->rdata->txt_addr);
+			    //print_free_bug(actual_rdata_addr, nb_ap);
+			    //print_redir_api(save_ap);
+				//MessageBoxA(NULL, "FIX IT", "!?", 0);
+				//exit(0);
+                nb_ap++;
+			}
+            rdata_free = get_rdata(rdata_free, &actual_rdata_addr);
+		}
+        rdata_used = add_rdata(rdata_used, actual_rdata_addr, ap->rdata->txt_addr);
+        rdata_actual = ap->rdata;
+        while (rdata_actual)
+        {
+            if (rdata_actual->rdata_addr != actual_rdata_addr)
+            {
+                if (find_rdata(rdata_used, actual_rdata_addr) == NULL)
+                    rdata_free = add_rdata(rdata_free, rdata_actual->rdata_addr, rdata_actual->txt_addr);
+                rdata_actual->rdata_addr = actual_rdata_addr;
+            }
+            rdata_actual = rdata_actual->next;
+        }
+		ap = ap->next;
+	}
+	print_free_rdata(rdata_free, nb_ap);
+}
+
+void fix_api_rdata(struct redir_api *ap)
+{
+	DWORD OldProtect;
+	struct rdata_s *rdata_actual = NULL;
+
+	while (ap)
+	{
+		rdata_actual = ap->rdata;
+		VirtualProtect((LPVOID)rdata_actual->rdata_addr, 4, PAGE_EXECUTE_READWRITE, &OldProtect);
+		*(DWORD*)rdata_actual->rdata_addr = ap->api_addr;
+		VirtualProtect((LPVOID)rdata_actual->rdata_addr, 4, OldProtect, &OldProtect);
+		while (rdata_actual)
+		{
+            VirtualProtect((LPVOID)rdata_actual->txt_addr, 4, PAGE_EXECUTE_READWRITE, &OldProtect);
+            *(DWORD*)rdata_actual->txt_addr = rdata_actual->rdata_addr;
+            VirtualProtect((LPVOID)rdata_actual->txt_addr, 4, OldProtect, &OldProtect);
+			rdata_actual = rdata_actual->next;
+		}
+		ap = ap->next;
+	}
 }

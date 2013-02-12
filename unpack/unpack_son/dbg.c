@@ -178,3 +178,56 @@ void print_res(DWORD dwResolve)
     fprintf(fp, "[+] dwResolve : %X\n", dwResolve);
     fclose(fp);
 }
+
+void print_redir_api(struct redir_api *ap)
+{
+    open_file();
+	while (ap)
+	{
+		fprintf(fp, "API (0x%X) has ", ap->api_addr);
+		print_rdata(fp, ap->rdata);
+		fprintf(fp, "\n");
+		ap = ap->next;
+	}
+    fclose(fp);
+}
+
+void print_rdata(FILE *fp, struct rdata_s *rd)
+{
+	while (rd)
+	{
+		fprintf(fp, "rdata.0x%X (txt.0x%X)  ", rd->rdata_addr, rd->txt_addr);
+		rd = rd->next;
+	}
+}
+
+void print_after(void)
+{
+    open_file();
+    fprintf(fp, "---- AFTER \n");
+    fclose(fp);
+}
+
+void print_free_bug(DWORD dwAddr, DWORD nb_ap)
+{
+    open_file();
+    fprintf(fp, "[-] rdata_free =  0x%X ; actual = 0x%X\n", dwAddr, nb_ap);
+    fclose(fp);
+}
+
+void print_free_rdata(struct rdata_s *rd, DWORD api_no)
+{
+    open_file();
+    fprintf(fp, "[---] Free RDATA [---] API_NO : %d\n", api_no);
+    print_rdata(fp, rd);
+    fprintf(fp, "[---] END [---]\n");
+    fclose(fp);
+}
+
+void printnb(struct redir_api *ap)
+{
+    open_file();
+    fprintf(fp, "NB REDIR API : %d\n", Countnbapi(ap));
+    fprintf(fp, "RDATA USED : %d\n", Countnbrdata(ap));
+    fclose(fp);
+}

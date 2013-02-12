@@ -158,6 +158,7 @@ void* ParsePE(BYTE* hMod, DWORD dwChamp)
             else
                 return (void*)NULL;
     }
+    return (void*)NULL;
 }
 
 void* ParseSection(PIMAGE_SECTION_HEADER pSection, DWORD dwChamp)

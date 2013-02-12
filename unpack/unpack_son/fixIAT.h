@@ -24,6 +24,20 @@ struct api
     struct api *next;
 };
 
+struct rdata_s
+{
+	struct	rdata_s *next;
+	DWORD	rdata_addr;
+	DWORD	txt_addr;
+};
+
+struct redir_api
+{
+	struct redir_api *next;
+	DWORD api_addr;
+	struct	rdata_s	*rdata;
+};
+
 void init_fixIAT(void);
 void add_api_to_module(struct dll *ldd);
 DWORD getendIAT(DWORD dwNearIAT);
@@ -39,6 +53,22 @@ struct api *add_api(struct api *lapi, char *name, DWORD dwAddress, WORD wOrdinal
 struct dll *find_dll(struct dll *ldll, DWORD dwAddr);
 struct api *find_api(struct api *lapi, DWORD dwAddr);
 
+// ALL REDIR STUFF
+
+struct redir_api *add_redir_api(struct redir_api *ap, DWORD api_addr, DWORD rdata_addr, DWORD txt_addr);
+struct rdata_s *add_rdata(struct rdata_s *rd, DWORD rdata_addr, DWORD txt_addr);
+struct rdata_s *get_rdata(struct rdata_s *rd, DWORD *rdata_addr);
+
+void fix_api_rdata(struct redir_api *ap);
+void reorder_api_rdata(struct redir_api *ap);
+
+struct redir_api *find_redir_api(struct redir_api *ap, DWORD api_addr);
+struct rdata_s *find_rdata(struct rdata_s *rd, DWORD rdata_addr);
+struct rdata_s *find_txt(struct rdata_s *rd, DWORD txt_addr);
+
+// DBG
+DWORD Countnbrdata(struct redir_api *ap);
+DWORD Countnbapi(struct redir_api *ap);
 
 #define OneByteLength 00
 #define TwoByteLength 01
@@ -50,18 +80,6 @@ struct api *find_api(struct api *lapi, DWORD dwAddr);
 #define LocalFlag 1
 
 #define DR7flag(_size,_type,flag,HBPnum) (((_size<<2 | _type)<< (HBPnum*4 +16)) | (flag << (HBPnum*2)))
-
-
-
-
-
-
-
-
-
-
-
-
 
 #endif // __FIXIAT_H__
 
